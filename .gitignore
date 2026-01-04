@@ -3,6 +3,8 @@
 *.db
 bin/
 data/
+*.obj
+*.o
 
 # Ignorar documentación generada, pero mantener la configuración
 docs/html/
