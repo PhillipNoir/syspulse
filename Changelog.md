@@ -4,6 +4,13 @@ Todas las modificaciones significativas de este proyecto serán documentadas en 
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
+## [0.2.0] - 2026-01-11
+### Añadido
+- Monitor de uso de Memoria RAM (`RamMonitor`) utilizando la API de Windows (`GlobalMemoryStatusEx`).
+- Columna `ram_usage` en la tabla de métricas de la base de datos para persistencia de datos de memoria.
+- Documentación Doxygen en español para todos los componentes nuevos y modificados.
+- Actualización de la lógica principal para capturar y registrar tanto CPU como RAM simultáneamente.
+
 ## [0.1.0] - 2026-01-04
 ### Añadido
 - Implementación de la gestión de conexión con SQLite3.

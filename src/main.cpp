@@ -23,6 +23,7 @@ int main() {
     // 2. Preparamos el Monitor
     // No nos importa qué es un FILETIME. Solo queremos el objeto.
     CpuMonitor monitor;
+    RamMonitor ramMonitor;
 
     std::cout << "[INFO] Comenzando ciclo de captura (Ctrl+C para salir)..." << std::endl;
 
@@ -30,14 +31,15 @@ int main() {
     while (true) {
         // A. Obtener el dato (Usando la Caja Negra 1)
         double currentCpu = monitor.getUsage();
+        double currentRam = ramMonitor.getUsage();
 
         // Validamos que no sea error (-1.0)
-        if (currentCpu >= 0.0) {
+        if (currentCpu >= 0.0 && currentRam >= 0.0) {
             // B. Mostrarlo en pantalla (Para que tú veas que funciona)
-            std::cout << "[Métrica] CPU: " << currentCpu << "%" << std::endl;
+            std::cout << "[Métrica] CPU: " << currentCpu << "% | RAM: " << currentRam << "%" << std::endl;
 
             // C. Guardarlo (Usando la Caja Negra 2)
-            if (!db.insertMetric(currentCpu)) {
+            if (!db.insertMetric(currentCpu, currentRam)) {
                 std::cerr << "[ERROR] Fallo al guardar en DB." << std::endl;
             }
         } else {

@@ -133,3 +133,64 @@ double CpuMonitor::getUsage() {
 
     return usage;
 }
+
+/**
+ * @brief Obtiene el uso actual de memoria RAM del sistema.
+ *
+ * @details
+ * A diferencia del uso de CPU, la memoria RAM NO se mide por actividad en el tiempo,
+ * sino por ESTADO de ocupación.
+ *
+ * El sistema operativo mantiene internamente contadores sobre:
+ *  - Memoria física total instalada.
+ *  - Memoria actualmente comprometida por procesos, kernel y caché del sistema.
+ *
+ * La API de Windows expone esta información mediante la función GlobalMemoryStatusEx,
+ * que rellena una estructura MEMORYSTATUSEX con estadísticas ya procesadas por el SO.
+ *
+ * Este monitor NO realiza:
+ *  - cálculos de diferencias (deltas)
+ *  - snapshots previos
+ *  - aritmética temporal
+ *
+ * Simplemente consulta el estado actual del gestor de memoria y devuelve el porcentaje
+ * que Windows considera como "memoria en uso".
+ *
+ * Esto implica que:
+ *  - El valor cambia lentamente.
+ *  - Refleja decisiones internas del SO (caché, memoria en espera, compresión).
+ *  - Representa ocupación, no actividad.
+ *
+ * @return double
+ *  - Valor entre 0.0 y 100.0 indicando el porcentaje aproximado de RAM utilizada.
+ *  - Retorna -1.0 si la llamada a la API del sistema falla.
+ */
+double RamMonitor::getUsage() {
+    // MEMORYSTATUSEX es una estructura definida por Windows para intercambiar información sobre el estado de la memoria del sistema.
+    // El SO escribirá directamente dentro de esta estructura.
+    MEMORYSTATUSEX memInfo;
+
+    // dwLength es un campo OBLIGATORIO.
+    // Le indica a Windows cuántos bytes tiene la estructura que le estamos pasando.
+    // Esto permite compatibilidad entre versiones del sistema operativo,
+    // ya que el tamaño real de MEMORYSTATUSEX puede cambiar con el tiempo.
+    memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+
+   // LLAMADA AL SISTEMA OPERATIVO
+   // GlobalMemoryStatusEx:
+   //  - no devuelve un valor nuevo calculado por nosotros
+   //  - escribe directamente los datos dentro de 'memInfo'
+   //  - retorna false (0) si la llamada falla
+    if (!GlobalMemoryStatusEx(&memInfo)) {
+        return -1.0; // Error al obtener estado de memoria
+    }
+
+    // dwMemoryLoad es un campo calculado INTERNAMENTE por Windows.
+    // Representa el porcentaje aproximado de memoria física en uso (0 a 100).
+    //
+    // static_cast<double> se utiliza para:
+    //  - convertir explícitamente el entero DWORD a double
+    //  - evitar conversiones implícitas ambiguas
+    //  - mantener consistencia con el resto de métricas del monitor
+    return static_cast<double>(memInfo.dwMemoryLoad);
+}

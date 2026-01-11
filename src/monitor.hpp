@@ -57,3 +57,25 @@ public:
      */
     double getUsage();
 };
+
+/**
+ * @class RamMonitor
+ * @brief Monitor de uso de Memoria RAM utilizando la API de Windows.
+ * @details
+ * Utiliza GlobalMemoryStatusEx para obtener información detallada sobre la memoria física.
+ */
+class RamMonitor {
+public:
+    /**
+     * @brief Constructor.
+     */
+    RamMonitor() = default;
+
+    /**
+     * @brief Obtiene el porcentaje de memoria RAM utilizada.
+     * @details
+     * Llama a GlobalMemoryStatusEx y extrae el campo dwMemoryLoad.
+     * @return double Porcentaje de uso de memoria (0.0 a 100.0). Retorna -1.0 si falla.
+     */
+    double getUsage();
+};

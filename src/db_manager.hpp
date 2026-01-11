@@ -46,8 +46,9 @@ public:
     /**
      * @brief Inserta una nueva métrica de rendimiento en la base de datos.
      * @param cpuUsage El porcentaje de uso de CPU a guardar (0.0 - 100.0).
+     * @param ramUsage El porcentaje de uso de RAM a guardar (0.0 - 100.0).
      * @return true Si la inserción fue exitosa.
      * @return false Si hubo un error de SQL o la base de datos no está conectada.
      */
-    bool insertMetric(double cpuUsage);
+    bool insertMetric(double cpuUsage, double ramUsage);
 };

@@ -54,7 +54,8 @@ void DatabaseManager::initTables() {
         "CREATE TABLE IF NOT EXISTS metrics ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
         "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,"
-        "cpu_usage REAL"
+        "cpu_usage REAL,"
+        "ram_usage REAL"
         ");";
 
     char* errMsg = nullptr; // Puntero para recibir el mensaje de error de SQLite
@@ -72,21 +73,22 @@ void DatabaseManager::initTables() {
 }
 
 /**
- * @brief Inserta una nueva métrica de CPU de forma segura.
+ * @brief Inserta una nueva métrica de rendimiento de forma segura.
  * Utiliza el patrón Prepare-Bind-Step para prevenir inyección SQL y mejorar rendimiento.
  * @param cpuUsage Valor porcentual de uso de CPU (double).
+ * @param ramUsage Valor porcentual de uso de RAM (double).
  * @return true Si la inserción fue exitosa.
  * @return false Si hubo un error en la preparación o ejecución.
  */
-bool DatabaseManager::insertMetric(double cpuUsage) {
+bool DatabaseManager::insertMetric(double cpuUsage, double ramUsage) {
     // Si no hay conexión válida a la base de datos, no tiene sentido continuar.
     // Evita intentar operar sobre un handle inválido.
     if (!connected) return false;
 
     // Sentencia SQL en forma de texto.
-    // El símbolo '?' es un placeholder que será reemplazado más adelante
+    // Los símbolos '?' son placeholders que serán reemplazados más adelante
     // mediante el mecanismo de binding.
-    const char* sql = "INSERT INTO metrics (cpu_usage) VALUES (?);";
+    const char* sql = "INSERT INTO metrics (cpu_usage, ram_usage) VALUES (?, ?);";
 
     // Puntero a un statement de SQLite.
     // Aquí se almacenará la versión compilada (bytecode interno) del SQL.
@@ -106,7 +108,7 @@ bool DatabaseManager::insertMetric(double cpuUsage) {
         return false;
     }
 
-     // 2. BIND
+    // 2. BIND
     // Asigna el valor real al placeholder '?' del statement.
     //
     // - stmt: statement previamente compilado
@@ -115,6 +117,7 @@ bool DatabaseManager::insertMetric(double cpuUsage) {
     //
     // En este punto el SQL deja de ser genérico y queda completamente definido.
     sqlite3_bind_double(stmt, 1, cpuUsage);
+    sqlite3_bind_double(stmt, 2, ramUsage);
 
     //3. STEP
     // Ejecuta el statement.
