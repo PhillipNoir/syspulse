@@ -4,6 +4,27 @@ Todas las modificaciones significativas de este proyecto serán documentadas en 
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
+## [0.3.0] - 2026-01-17
+### Añadido
+- Sistema de almacenamiento genérico de métricas basado en SQLite.
+- Tabla `metrics` desacoplada del dominio (component, metric, value, unit, timestamp).
+- Inserción de métricas mediante sentencias preparadas para mayor seguridad y robustez.
+- Documentación técnica detallada en `db_manager.cpp` orientada al aprendizaje de SQLite y C++ moderno.
+
+### Cambiado
+- Rediseño del `DatabaseManager` para aplicar RAII de forma estricta.
+- Inicialización idempotente del esquema de base de datos.
+- Manejo explícito del ciclo de vida de la conexión SQLite.
+- Flujo de reporte de métricas modificado para **no reportar valores inválidos o no inicializados**.
+
+### Removido
+- Lógica implícita de creación/uso de métricas acopladas a componentes específicos.
+- Dependencia de estados no inicializados al calcular métricas temporales.
+
+### Notas
+- Estos cambios sientan la base para futuras optimizaciones como transacciones por lote,
+  consultas históricas y agregación de métricas.
+
 ## [0.2.0] - 2026-01-11
 ### Añadido
 - Monitor de uso de Memoria RAM (`RamMonitor`) utilizando la API de Windows (`GlobalMemoryStatusEx`).

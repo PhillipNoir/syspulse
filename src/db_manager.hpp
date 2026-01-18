@@ -10,6 +10,7 @@
 #pragma once
 #include <string>
 #include <sqlite3.h> // Le diremos al compilador dónde buscarlo
+#include "monitor.hpp" // Para struct Metric
 
 /**
  * @class DatabaseManager
@@ -22,20 +23,25 @@
 class DatabaseManager {
 private:
     sqlite3* db;    ///< Puntero nativo (Handle) a la conexión de SQLite.
-    bool connected; ///< Bandera de estado. True si la conexión está abierta y válida.
 
     /**
      * @brief Método interno para inicializar el esquema de la base de datos.
      * Ejecuta sentencias DDL (CREATE TABLE) si las tablas no existen.
      */
-    void initTables();
+    bool initTables();
     
 public:
     /**
-     * @brief Constructor. Intenta abrir o crear la base de datos.
-     * @param dbPath Ruta relativa o absoluta al archivo .db (ej: "data/syspulse.db").
+     * @brief Constructor. Inicializa el puntero a null.
      */
-    DatabaseManager(const std::string& dbPath);
+    DatabaseManager();
+
+    /**
+     * @brief Conecta a la base de datos.
+     * @param dbPath Ruta al archivo .db.
+     * @return true si la conexión e inicialización fueron exitosas.
+     */
+    bool connect(const std::string& dbPath);
     
     /**
      * @brief Destructor.
@@ -44,11 +50,10 @@ public:
     ~DatabaseManager();
 
     /**
-     * @brief Inserta una nueva métrica de rendimiento en la base de datos.
-     * @param cpuUsage El porcentaje de uso de CPU a guardar (0.0 - 100.0).
-     * @param ramUsage El porcentaje de uso de RAM a guardar (0.0 - 100.0).
+     * @brief Inserta una nueva métrica genérica en la base de datos.
+     * @param metric Objeto Metric con los datos a guardar.
      * @return true Si la inserción fue exitosa.
      * @return false Si hubo un error de SQL o la base de datos no está conectada.
      */
-    bool insertMetric(double cpuUsage, double ramUsage);
+    bool insertMetric(const Metric& metric);
 };

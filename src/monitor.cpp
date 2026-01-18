@@ -1,6 +1,6 @@
 /**
  * @file monitor.cpp
- * @brief Monitor de uso de CPU en Windows basado en aritmética de tiempo.
+ * @brief Monitor de uso de CPU y RAM en Windows basado en aritmética de tiempo.
  *
  * Este archivo NO mide el uso de CPU preguntando "qué tan ocupada está", porque el sistema operativo no responde eso directamente.
  *
@@ -12,11 +12,14 @@
  *
  * El porcentaje de uso se obtiene comparando DOS LECTURAS en el tiempo y calculando qué fracción del tiempo fue realmente trabajo.
  *
+ * El porcentaje de uso de la RAM se obtiene consultando el estado actual del sistema.
+ *
  * Este archivo es el resultado de entender eso sobre la marcha.
  */
 
 #include "monitor.hpp"
 #include <iostream>
+#include <chrono>
 
 /**
  * @brief Constructor del monitor de CPU.
@@ -30,108 +33,73 @@
  * Sin esta lectura inicial, el primer cálculo compararía contra cero y produciría porcentajes absurdos.
  */
 CpuMonitor::CpuMonitor() {
-    // Los tiempos del sistema se manejan como números de 64 bits.
-    // ULARGE_INTEGER nos permite acceder a ese número completo vía QuadPart.
+    //Inicializamos los tiempos previos en cero.
     lastIdleTime.QuadPart = 0;
     lastKernelTime.QuadPart = 0;
     lastUserTime.QuadPart = 0;
-    
-    // Primera lectura "en vacío":
-    // no la usamos, solo sirve para inicializar el pasado.
-    getUsage(); 
 }
 
-/**
- * @brief Convierte un FILETIME de Windows en un entero de 64 bits usable.
- *
- * FILETIME es la forma nativa del sistema operativo para representar tiempo, pero está dividido en dos campos de 32 bits:
- *  - dwLowDateTime
- *  - dwHighDateTime
- *
- * ULARGE_INTEGER es una estructura compatible que permite:
- *  - copiar esos dos bloques
- *  - y acceder al valor completo como un solo número de 64 bits (QuadPart)
- *
- * Esta función NO transforma el tiempo, solo lo "reconstruye" en una forma matemática operable.
- */
 ULARGE_INTEGER CpuMonitor::fileTimeToInt(const FILETIME& ft) {
+    //FILETIME almacena el tiempo como dos valores de 32 bits (ft.dwLowDateTime y ft.dwHighDateTime). 
+    //Para poder operar matemáticamente con él, se reconstruye el valor completo en un ULARGE_INTEGER, usando sus campos LowPart y HighPart, y se utiliza QuadPart como entero de 64 bits
     ULARGE_INTEGER uli;
-
-    // Parte baja del contador de tiempo (32 bits menos significativos)
     uli.LowPart = ft.dwLowDateTime;
-
-    // Parte alta del contador de tiempo (32 bits más significativos)
     uli.HighPart = ft.dwHighDateTime;
-
-    // Ahora uli.QuadPart contiene el número completo de 64 bits
     return uli;
 }
 
-/**
- * @brief Calcula el porcentaje de uso de CPU.
- *
- * Este método NO mide actividad instantánea.
- * Calcula uso de CPU comparando el tiempo transcurrido entre esta llamada y la anterior.
- *
- * La lógica general es:
- * 1. Leer contadores acumulativos del sistema.
- * 2. Convertirlos a enteros.
- * 3. Restarlos contra la lectura anterior.
- * 4. Determinar qué fracción del tiempo fue trabajo real.
- */
-double CpuMonitor::getUsage() {
+std::optional<Metric> CpuMonitor::getMetric() {
     FILETIME idleTime, kernelTime, userTime;
+    Metric m;
+    m.component = "CPU";
+    m.metric = "Usage";
+    m.unit = "%";
+    
+    // Timestamp actual
+    auto now = std::chrono::system_clock::now();
+    m.timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count(); //Convierte el tiempo actual en segundos desde el epoch (1970-01-01 00:00:00 UTC) y lo almacena en el campo timestamp de la estructura Metric.
 
-    // LLAMADA AL SISTEMA OPERATIVO
-    // Windows escribe directamente en estas estructuras.
-    // No devuelve tiempos "actuales", sino acumulados desde el arranque.
+    //Se llama a GetSystemTimes para obtener los tiempos acumulados de CPU.
+    //Si la función falla, se retorna un valor nulo.
     if (!GetSystemTimes(&idleTime, &kernelTime, &userTime)) {
-        return -1.0; // Error al leer la API
+        return std::nullopt;
     }
 
-    // Convertimos los tiempos del formato del OS a números de 64 bits que podamos restar.
+    //Los valores de tiempo devueltos por GetSystemTimes en estructuras FILETIME se convierten a enteros de 64 bits (ULARGE_INTEGER) para permitir operaciones aritméticas entre lecturas.
     ULARGE_INTEGER nowIdle = fileTimeToInt(idleTime);
     ULARGE_INTEGER nowKernel = fileTimeToInt(kernelTime);
     ULARGE_INTEGER nowUser = fileTimeToInt(userTime);
 
-    // Caso especial: primera ejecución real.
-    // No hay un "antes" válido, así que solo guardamos el estado actual.
+    //Si no se ha realizado una lectura previa, se inicializan los valores anteriores con los valores actuales y se retorna un valor nulo.
     if (lastIdleTime.QuadPart == 0) {
         lastIdleTime = nowIdle;
         lastKernelTime = nowKernel;
         lastUserTime = nowUser;
-        return 0.0;
+        return std::nullopt;
     }
 
-    // DELTAS DE TIEMPO
-    // Aquí ocurre la magia real:
-    // calculamos cuánto tiempo pasó desde la última medición.
+    //Se calcula la diferencia entre el tiempo actual y el tiempo anterior para cada componente.
     ULONGLONG deltaIdle = nowIdle.QuadPart - lastIdleTime.QuadPart;
     ULONGLONG deltaKernel = nowKernel.QuadPart - lastKernelTime.QuadPart;
     ULONGLONG deltaUser = nowUser.QuadPart - lastUserTime.QuadPart;
 
-    // Actualizamos el "pasado" para que sea el "presente" en la siguiente llamada
+    //Se actualizan los valores anteriores con los valores actuales.
     lastIdleTime = nowIdle;
     lastKernelTime = nowKernel;
     lastUserTime = nowUser;
 
-    // Matemáticas de Windows:
-    // Tiempo Total = Kernel + User (Nota: Kernel Time ya incluye internamente el Idle Time en algunas versiones, pero la fórmula estándar segura es Kernel + User).
+    //Se calcula el total de tiempo del sistema sumando el tiempo del kernel y el tiempo del usuario.
     ULONGLONG totalSystem = deltaKernel + deltaUser;
 
-    // Evitar división por cero si la PC es demasiado rápida o el intervalo muy corto
-    if (totalSystem == 0) return 0.0; // Evitar división por cero
-
-    // CÁLCULO FINAL
-    // Si sabemos:
-    //  - cuánto tiempo total pasó
-    //  - cuánto de ese tiempo la CPU estuvo idle
-    //
-    // Entonces:
-    // uso = 1 - (idle / total)
-    double usage = (1.0 - ((double)deltaIdle / (double)totalSystem)) * 100.0;
-
-    return usage;
+    //Si no transcurrió tiempo entre lecturas, no es posible calcular una métrica significativa.
+    if (totalSystem == 0) {
+        m.value = 0.0;
+    } else {
+        //Se calcula el porcentaje de uso de la CPU restando el tiempo idle al total de tiempo del sistema y dividiendo el resultado por el total de tiempo del sistema.
+        m.value = (1.0 - ((double)deltaIdle / (double)totalSystem)) * 100.0;
+    }
+    
+    return m;
 }
 
 /**
@@ -163,34 +131,43 @@ double CpuMonitor::getUsage() {
  *
  * @return double
  *  - Valor entre 0.0 y 100.0 indicando el porcentaje aproximado de RAM utilizada.
- *  - Retorna -1.0 si la llamada a la API del sistema falla.
+ *  - Retorna nullopt si la llamada a la API del sistema falla.
  */
-double RamMonitor::getUsage() {
+std::optional<Metric> RamMonitor::getMetric() {
     // MEMORYSTATUSEX es una estructura definida por Windows para intercambiar información sobre el estado de la memoria del sistema.
     // El SO escribirá directamente dentro de esta estructura.
     MEMORYSTATUSEX memInfo;
 
     // dwLength es un campo OBLIGATORIO.
     // Le indica a Windows cuántos bytes tiene la estructura que le estamos pasando.
-    // Esto permite compatibilidad entre versiones del sistema operativo,
-    // ya que el tamaño real de MEMORYSTATUSEX puede cambiar con el tiempo.
+    // Esto permite compatibilidad entre versiones del sistema operativo, ya que el tamaño real de MEMORYSTATUSEX puede cambiar con el tiempo.
     memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+    
+    Metric m;
+    m.component = "RAM";
+    m.metric = "Usage";
+    m.unit = "%";
 
-   // LLAMADA AL SISTEMA OPERATIVO
-   // GlobalMemoryStatusEx:
-   //  - no devuelve un valor nuevo calculado por nosotros
-   //  - escribe directamente los datos dentro de 'memInfo'
-   //  - retorna false (0) si la llamada falla
+    // Timestamp actual
+    auto now = std::chrono::system_clock::now();
+    m.timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+    
+    // LLAMADA AL SISTEMA OPERATIVO
+    // GlobalMemoryStatusEx:
+    //  - no devuelve un valor nuevo calculado por nosotros
+    //  - escribe directamente los datos dentro de 'memInfo'
+    //  - retorna false (0) si la llamada falla
     if (!GlobalMemoryStatusEx(&memInfo)) {
-        return -1.0; // Error al obtener estado de memoria
+        return std::nullopt; // Error al obtener estado de memoria
+    } else {
+        // dwMemoryLoad es un campo calculado INTERNAMENTE por Windows.
+        // Representa el porcentaje aproximado de memoria física en uso (0 a 100).
+        // static_cast<double> se utiliza para:
+        //  - convertir explícitamente el entero DWORD a double
+        //  - evitar conversiones implícitas ambiguas
+        //  - mantener consistencia con el resto de métricas del monitor
+        m.value = static_cast<double>(memInfo.dwMemoryLoad);
     }
 
-    // dwMemoryLoad es un campo calculado INTERNAMENTE por Windows.
-    // Representa el porcentaje aproximado de memoria física en uso (0 a 100).
-    //
-    // static_cast<double> se utiliza para:
-    //  - convertir explícitamente el entero DWORD a double
-    //  - evitar conversiones implícitas ambiguas
-    //  - mantener consistencia con el resto de métricas del monitor
-    return static_cast<double>(memInfo.dwMemoryLoad);
+    return m;
 }

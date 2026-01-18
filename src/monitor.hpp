@@ -1,12 +1,26 @@
 /**
  * @file monitor.hpp
- * @brief Definición de la clase CpuMonitor para sistemas Windows.
+ * @brief Definición de la clase CpuMonitor y RamMonitor para sistemas Windows.
  * @details Utiliza la API de Win32 para leer los contadores de bajo nivel del procesador.
  * @author Sergio Gonzalez
  * @date 2026-01-03
  */
 #pragma once
 #include <windows.h> // Necesario para FILETIME y ULARGE_INTEGER
+#include <string>
+#include <optional>
+
+/**
+ * @struct Metric
+ * @brief Estructura genérica para representar una medición del sistema.
+ */
+struct Metric {
+    std::string component; ///< Componente medido (CPU, RAM, etc)
+    std::string metric;    ///< Nombre de la métrica (Usage, Temperature, etc)
+    double value;          ///< Valor numérico
+    std::string unit;      ///< Unidad de medida (%, MB, C)
+    long long timestamp;   ///< Timestamp Unix
+};
 
 /**
  * @class CpuMonitor
@@ -49,33 +63,50 @@ public:
     CpuMonitor();
 
     /**
-     * @brief Calcula el porcentaje de uso de CPU actual.
-     * @details
-     * Compara los tiempos actuales del sistema contra los guardados en 'last*Time'.
-     * Fórmula: %Uso = (TiempoTotal - TiempoIdle) / TiempoTotal * 100.
-     * @return double Porcentaje de uso (0.0 a 100.0). Retorna -1.0 si falla la API.
+     * @brief Obtiene una métrica completa del uso de CPU.
+     * @return std::optional<Metric> Objeto con valor si es válido, o nullopt si no (init/error).
      */
-    double getUsage();
+    std::optional<Metric> getMetric();
 };
 
 /**
  * @class RamMonitor
  * @brief Monitor de uso de Memoria RAM utilizando la API de Windows.
+ *
  * @details
- * Utiliza GlobalMemoryStatusEx para obtener información detallada sobre la memoria física.
+ * Funcionamiento Técnico:
+ * A diferencia del CPU, la memoria RAM no se mide por actividad en el tiempo,
+ * sino por ESTADO de ocupación.
+ *
+ * Windows mantiene contadores internos sobre:
+ *  - Memoria física total instalada.
+ *  - Memoria actualmente comprometida por procesos, el kernel y el sistema.
+ *
+ * La API GlobalMemoryStatusEx expone esta información ya procesada por el sistema operativo,
+ * incluyendo el campo dwMemoryLoad, que representa un porcentaje aproximado de uso
+ * de memoria física.
+ *
+ * Este monitor NO realiza cálculos de deltas ni aritmética temporal.
+ * Simplemente consulta el estado actual del sistema y devuelve el valor reportado por Windows.
+ *
+ * Esto implica que:
+ *  - El valor cambia lentamente.
+ *  - Refleja decisiones del gestor de memoria del SO (caché, compresión, swapping).
+ *  - No representa actividad, sino ocupación.
  */
 class RamMonitor {
 public:
     /**
      * @brief Constructor.
+     *
+     * No requiere inicialización especial.
+     * La información de memoria se obtiene completamente bajo demanda.
      */
     RamMonitor() = default;
 
     /**
-     * @brief Obtiene el porcentaje de memoria RAM utilizada.
-     * @details
-     * Llama a GlobalMemoryStatusEx y extrae el campo dwMemoryLoad.
-     * @return double Porcentaje de uso de memoria (0.0 a 100.0). Retorna -1.0 si falla.
+     * @brief Obtiene una métrica completa del uso de RAM.
+     * @return std::optional<Metric> Objeto con valor si es válido.
      */
-    double getUsage();
+    std::optional<Metric> getMetric();
 };
